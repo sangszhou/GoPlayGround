@@ -42,6 +42,7 @@ type Service struct {
 	methods map[string]reflect.Method
 }
 
+//参数是一个 类和它的方法
 func MakeService(rcvr interface{}) *Service {
 
 	//log.Printf("type of argument is %s", reflect.TypeOf(rcvr))
@@ -50,12 +51,14 @@ func MakeService(rcvr interface{}) *Service {
 	svc.typ = reflect.TypeOf(rcvr)
 	svc.rcvr = reflect.ValueOf(rcvr)
 	svc.name = reflect.Indirect(svc.rcvr).Type().Name()
+	//反射的方法
 	svc.methods = map[string]reflect.Method{}
 
 	log.Printf("num of method is %d", svc.typ.NumMethod())
 
 	for m := 0; m < svc.typ.NumMethod(); m ++ {
 		method := svc.typ.Method(m)
+		//方法为什么还有类型，是调用方的类型么
 		mtype := method.Type
 		mname := method.Name
 
@@ -78,8 +81,8 @@ func MakeService(rcvr interface{}) *Service {
 	return svc
 }
 
-func (svc *Service) dispatch(methodname string, req reqMsg) replyMsg {
-	if method, ok := svc.methods[methodname]; ok {
+func (svc *Service) dispatch(methodName string, req reqMsg) replyMsg {
+	if method, ok := svc.methods[methodName]; ok {
 		// prepare space into which to read the argument.
 		// the Value's type will be a pointer to req.argsType.
 		args := reflect.New(req.argsType)
@@ -90,11 +93,13 @@ func (svc *Service) dispatch(methodname string, req reqMsg) replyMsg {
 		ad.Decode(args.Interface())
 
 		// allocate space for the reply.
+		// 第二个参数肯定是返回值，就是这么定义的
 		replyType := method.Type.In(2)
 		replyType = replyType.Elem()
 		replyv := reflect.New(replyType)
 
-		// call the method.
+		// call the method
+		// 反射调用方法的用法
 		function := method.Func
 		function.Call([]reflect.Value {svc.rcvr, args.Elem(), replyv} )
 
@@ -110,7 +115,7 @@ func (svc *Service) dispatch(methodname string, req reqMsg) replyMsg {
 			choices = append(choices, k)
 		}
 		log.Fatalf("labrpc.Service.dispatch(): unknown method %v in %v; expecting one of %v\n",
-			methodname, req.svcMeth, choices)
+			methodName, req.svcMeth, choices)
 		return replyMsg{false, nil}
 	}
 }

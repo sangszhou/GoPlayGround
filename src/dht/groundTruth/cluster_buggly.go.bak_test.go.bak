@@ -1,0 +1,94 @@
+//package groundTruth
+//
+//import (
+//	"dht/v1"
+//	"math/big"
+//	"testing"
+//	"fmt"
+//	"log"
+//)
+//
+//func createNode(id int) *v1.Node {
+//	node := &v1.Node {
+//		// string(id) not working
+//		Address:fmt.Sprintf("%d", id),
+//		Id:big.NewInt(int64(id)),
+//	}
+//	return node
+//}
+//
+//func TestCreateNode(t *testing.T)  {
+//	node1 := &v1.Node{
+//		Address:"0",
+//		Id:big.NewInt(0),
+//	}
+//
+//	DescribeNode(node1)
+//}
+//
+//
+//
+//func TestCreateCluster(t *testing.T)  {
+//	cluster := &Cluster{}
+//
+//	node1 := createNode(1)
+//	node0 := createNode(0)
+//
+//
+//	cluster.AddNode(node1)
+//	cluster.AddNode(node0)
+//	cluster.Describe()
+//}
+//
+//func TestFindPredecessor(t *testing.T)  {
+//	cluster := &Cluster{}
+//
+//	node1 := createNode(1)
+//	node0 := createNode(0)
+//
+//	cluster.AddNode(node1)
+//	cluster.AddNode(node0)
+//
+//	predecessorId := cluster.Predecessor(node0.Id)
+//	// should be 0
+//	log.Print("predecessor id: " + predecessorId.String())
+//
+//	predecessorId = cluster.Predecessor(node1.Id)
+//	// should be 1
+//	log.Print("predecessor id: " + predecessorId.String())
+//
+//}
+//
+//func TestFindSuccessor(t *testing.T) {
+//	cluster := &Cluster{}
+//
+//	node1 := createNode(1)
+//	node0 := createNode(0)
+//
+//	cluster.AddNode(node1)
+//	cluster.AddNode(node0)
+//
+//	predecessorId := cluster.Successor(node0.Id)
+//	// should be 0
+//	log.Print("successor id: " + predecessorId.String())
+//
+//	predecessorId = cluster.Successor(node1.Id)
+//	// should be 1
+//	log.Print("successor id: " + predecessorId.String())
+//
+//}
+//
+//func TestStableCluster(t *testing.T)  {
+//	cluster := &Cluster{}
+//
+//	node1 := createNode(1)
+//	node0 := createNode(0)
+//
+//
+//	cluster.AddNode(node1)
+//	cluster.AddNode(node0)
+//
+//	cluster.WaitStable()
+//
+//	cluster.Describe()
+//}

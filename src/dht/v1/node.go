@@ -6,18 +6,31 @@ import (
 	"net/rpc"
 )
 
-const m  = 128
+const m  = 3
 
 type Node struct {
 	// "host:port"
-	Address string
-	Id *big.Int
-	Successor string
+	Address     string
+	Id          *big.Int
+	Successor   string
 	Predecessor string
-	finger [m]string
+	Finger      [m]string
 	// 作为数据时自身保存的数据，可以扩展之
 	Data map[string]string
+	// 用来持续的 fix data table
 	nextFingerIndex2Fix int
+}
+
+/**
+	deep copy part of original node structure
+ */
+func copyNode(origin *Node) *Node {
+	return &Node{
+		Address:origin.Address,
+		Id:origin.Id,
+		Successor:origin.Successor,
+		Predecessor:origin.Predecessor,
+	}
 }
 
 
@@ -33,12 +46,12 @@ func (n *Node) addr() string {
 // 注意不要出现递归查找的情况
 // @todo make node identifier a method, instead type
 func (n *Node) create() {
-	log.Print("node %s create cluster", n.Address)
+	log.Printf("node %s create cluster", n.Address)
 	// 把 fingertable 的所有 entry 都指向自己
 	n.Predecessor = n.addr()
 	n.Successor = n.addr()
-	for i := 0; i < len(n.finger); i ++ {
-		n.finger[i] = n.addr()
+	for i := 0; i < len(n.Finger); i ++ {
+		n.Finger[i] = n.addr()
 	}
 }
 
@@ -50,25 +63,24 @@ func (n *Node) join(bootstrap string)  {
 	n.Successor = findSuccessor(bootstrap, n.Id)
 }
 
-
 /**
 	this init is no logger needed in multinode leave and join serinario
 	@deprecated
  */
 func (n *Node) initFingerTable(bootstrap string)  {
-	n.finger[1] = findPredecessor(bootstrap, FingerEntry(n.addr(), 1))
-	n.Successor = n.finger[1]
+	n.Finger[1] = findPredecessor(bootstrap, FingerEntry(n.addr(), 1))
+	n.Successor = n.Finger[1]
 	n.Predecessor = findPredecessor(n.Successor, nil)
 	n.stabilize()
 
 	// 似乎下面的更新都不需要, 因为 fix table 会更新的
-	for i := 2; i < len(n.finger); i ++ {
+	for i := 2; i < len(n.Finger); i ++ {
 		start := FingerEntry(n.addr(), i)
 		// quick path, no need to update
-		if Hash(n.finger[i-1]).Cmp(start) > 0 {
-			n.finger[i] = n.finger[i-1]
+		if Hash(n.Finger[i-1]).Cmp(start) > 0 {
+			n.Finger[i] = n.Finger[i-1]
 		} else {
-			n.finger[i] = findSuccessor(bootstrap, start)
+			n.Finger[i] = findSuccessor(bootstrap, start)
 		}
 	}
 }
@@ -78,13 +90,14 @@ func (n *Node) initFingerTable(bootstrap string)  {
 	node 是连接点，借助它找到目标节点
 	找到 id 的 successor
  */
-func findSuccessor(node string, id *big.Int) string {
+func findSuccessor(helper string, id *big.Int) string {
 	if id == nil {
-		id = Hash(node)
+		id = Hash(helper)
 	}
-	client, err := rpc.Dial("tcp", node)
+
+	client, err := rpc.Dial("tcp", helper)
 	if err != nil {
-		log.Print("Failed to connect to bootstrap %s", node)
+		log.Print("Failed to connect to bootstrap %s", helper)
 	}
 
 	defer client.Close()
@@ -92,8 +105,13 @@ func findSuccessor(node string, id *big.Int) string {
 	// 在 predecessor 上查找 successor 应该一下就能找到
 	err = client.Call("Node.FindSuccessor", id, &response)
 	if err != nil {
-		log.Print("connected to %s, but failed to find successor", node)
+		log.Print("connected to %s, but failed to find successor", helper)
 	}
+
+	// 找到 predecessor.successor
+
+
+
 	return response
 }
 
@@ -148,8 +166,8 @@ func (n *Node) stabilize()  {
 }
 
 /*
-	random index  > 1 into finger table
-	finger[i].node = findSuccessor(finger[i].start)
+	random index  > 1 into Finger table
+	Finger[i].node = findSuccessor(Finger[i].start)
  */
 func (n *Node)fixFingerTable()  {
 	// 最小是 1
@@ -162,7 +180,7 @@ func (n *Node)fixFingerTable()  {
 	// 是不是要进行 force 一下呢
 	response := findSuccessor(n.Successor, start)
 	if response != "" {
-		n.finger[n.nextFingerIndex2Fix] = response
+		n.Finger[n.nextFingerIndex2Fix] = response
 	}
 
 }
@@ -186,23 +204,32 @@ func (n*Node) Notify(predecessorCandidate string, response *interface{}) error {
 // 只有当前节点的 successor 和 predecessor 可信，以此来找到节点
 // 实际上， predecessor 和 successor 两个方法，只要有一个可用就行了，另外一个可以依靠这个方法实现
 // FindSuccessor = FindPredecessor.successor
-func (n *Node) FindPredecessor(id *big.Int, response *string) error {
+func (n *Node) FindPredecessor(id *big.Int, predecessor *Node) error {
 	// quick path
-	if InclusiveBetween(Hash(n.Predecessor), id, n.Id) {
-		response = &n.Predecessor
+	// 此时，节点 N 还没有把 id 放到自己的 Finger table 中，所以自己的 successor 不会是 id 对应的节点
+	if InclusiveBetween(n.Id, id, Hash(n.Successor)) {
+		//deep copy struct
+		predecessor = copyNode(n)
 	} else {
 		// 需要遍历 fingerTable 来查看最近的点在哪，然后递归查找
 		// how to reverse fingerTable
 		closestPreceding := n.closestPrecedingNode(id)
-		client , err := rpc.Dial("tcp", closestPreceding)
-		if err != nil {
-			log.Print("failed to connect to remote node %v", closestPreceding)
-			return err
-		}
+		//*** 判断此节点是不是就是自身
+		if closestPreceding == n.Address {
+			log.Print("it seems there is only one node in cluster, set it to you predecessor")
+			predecessor = copyNode(n)
+			return nil
+		} else {
+			client , err := rpc.Dial("tcp", closestPreceding)
+			if err != nil {
+				log.Print("failed to connect to remote node %v", closestPreceding)
+				return err
+			}
 
-		err = client.Call("Node.FindPredecessor", id, response)
-		if err != nil {
-			log.Print("Failed to find predecessor from node %v", closestPreceding)
+			err = client.Call("Node.FindPredecessor", id, predecessor)
+			if err != nil {
+				log.Print("Failed to find predecessor from node %v", closestPreceding)
+			}
 		}
 	}
 	return nil
@@ -211,43 +238,63 @@ func (n *Node) FindPredecessor(id *big.Int, response *string) error {
 /**
 	这个需要考虑 currentNode 和 id 之间的关系
 	Inclusive 已经考虑了过 0 的问题了
+	这个节点找的是 predecessor
  */
 func (n *Node) closestPrecedingNode(id *big.Int) string {
-	for i:= len(n.finger)-1; i >= 0; i -- {
-		if ExclusiveBetween(id, Hash(n.finger[i]), n.Id) {
-			return n.finger[i]
+	for i:= len(n.Finger)-1; i >= 0; i -- {
+		if ExclusiveBetween(id, Hash(n.Finger[i]), n.Id) {
+			return n.Finger[i]
 		}
 	}
 
-	return ""
+	return n.Address
 }
 
 // 新节点加入时，请求自己帮忙找它的 successor
-func (n *Node) FindSuccessor(id *big.Int, response *string) error {
-	// 这个判断会不会使得更新暂停呢 ?
-	if ExclusiveBetween(n.Id, id, Hash(n.Successor)) {
-		*response = n.Successor
+func (n *Node) FindSuccessor(id *big.Int, successor *Node) error {
+
+	// find successor 依靠 predecessor 来完成
+	var predecessor *Node
+	err := n.FindPredecessor(id, predecessor)
+
+	if err != nil {
+		log.Print("Failed to find predecessor from node %v", n.addr())
+	}
+
+	successor = n.identify(predecessor.Successor)
+	return nil
+}
+
+/**
+	返回自身的地址
+	this code is not cool
+ */
+func (n *Node) identify(addr string) *Node {
+	client, err := rpc.Dial("tcp", addr)
+	if err != nil {
+		log.Print("node: %v failed to connect to addr: %v ", n.Address, addr)
+		return nil
+	}
+	var targetNode *Node
+	err = client.Call("Node.Identify", addr, targetNode)
+
+	if err != nil {
+		log.Print("failed to identify %v", addr)
+	}
+
+	return targetNode
+}
+
+func (n *Node) Identify(addr string, node *Node) error {
+	if addr == n.Address {
+		node = copyNode(n)
+		return nil
 	} else {
-		// find successor 依靠 predecessor 来完成
-		var predecessor string
-		err := n.FindPredecessor(id, &predecessor)
+		log.Print("the addr is not me")
 
-		if err != nil {
-			log.Print("Failed to find predecessor from node %v", n.addr())
-		}
-
-		client, err2 := rpc.Dial("tcp", predecessor)
-
-		if err2 != nil {
-			log.Print("Failed to connec to node %v", predecessor)
-		}
-
-		err2 = client.Call("Node.FindSuccessor", id, response)
-		if err2 != nil {
-			log.Print("Failed to call find successor on node %v", predecessor)
-		}
 	}
 
 	return nil
 }
+
 

@@ -1,0 +1,162 @@
+//package groundTruth
+//
+//import (
+//	"dht/v1"
+//	"math/big"
+//	"fmt"
+//	"log"
+//)
+//
+//type Cluster struct {
+//	Nodes []*v1.Node
+//}
+//
+//const keySize = 3
+//var hashMod = new(big.Int).Exp(big.NewInt(2), big.NewInt(keySize), nil)
+//
+///**
+//	newNode can only have *id, do not need anything else
+// */
+//func (cluster *Cluster)AddNode(newNode *v1.Node)  {
+//	// append slice using append
+//	cluster.Nodes = append(cluster.Nodes, newNode)
+//}
+//
+///**
+//
+// */
+//func (cluster *Cluster) WaitStable()  {
+//	for _, node := range cluster.Nodes {
+//		// iterate node finger table
+//		for i := 0; i < len(node.Finger); i ++ {
+//			start := FingerTableStart(node.Id, i)
+//			ceil := cluster.Successor(start)
+//			if ceil == nil {
+//				// only one node in cluster
+//				node.Finger[i] = node.Address
+//			} else {
+//				node.Finger[i] = cluster.FindNodeById(ceil)
+//			}
+//		}
+//
+//		//successor and predecessor
+//		node.Successor = node.Finger[0]
+//		node.Predecessor = cluster.FindNodeById(cluster.Predecessor(node.Id))
+//	}
+//}
+//
+///**
+//	返回 fingerTable 的起始节点
+// */
+//func FingerTableStart(id *big.Int, entryIdx int) *big.Int {
+//	two := big.NewInt(2)
+//	exponent := big.NewInt(int64(entryIdx))
+//	two.Exp(two, exponent, nil)
+//	id.Add(id, two)
+//	return id.Mod(id, hashMod)
+//}
+//
+//func (cluster *Cluster) FindNodeById(id *big.Int) string {
+//	for _, node := range cluster.Nodes {
+//		if node.Id.Cmp(id) == 0 {
+//			return node.Address
+//		}
+//	}
+//
+//	return ""
+//}
+//
+///**
+//	the next element in ring that `bigger` that node's finger table
+//	Successor 有两个语义，第一个语义是适合保存 id 的节点，这个时候，目标 id 是可以相等的
+//	第二个语义是，节点的 successor, 这个时候是不能相等的。下面的实现是可以相等的，对于第二个
+//	语义，可以使用 id+1 作为参数来实现
+// */
+//func (cluster *Cluster) Successor(id *big.Int) *big.Int {
+//	//@todo set it to a very big number
+//	biggest := big.NewInt(99999)
+//	var result *big.Int = biggest
+//
+//	// the lower part loop
+//	for _, node := range cluster.Nodes {
+//		if node.Id.Cmp(id) >= 0 && node.Id.Cmp(result) < 0 {
+//			result = node.Id
+//		}
+//	}
+//
+//	if result.Cmp(biggest) != 0 {
+//		// 在 lower part 找到了，就不用考虑 upper part 了
+//		return result
+//	}
+//
+//	// the upper loop
+//	smallest := big.NewInt(0)
+//	result = smallest
+//	for _, node := range cluster.Nodes {
+//		// 这里不可能出现等于的情况了
+//		if node.Id.Cmp(id) < 0 && node.Id.Cmp(result) > 0 {
+//			result = node.Id
+//		}
+//	}
+//
+//	if result.Cmp(smallest) != 0 {
+//		return result
+//	}
+//
+//	// return itself, means it is the only node in cluster
+//	log.Print("only one node in cluster")
+//	return nil;
+//}
+//
+///**
+//	the biggest all the
+//	predecessor 和 successor 并不等价，predecessor 只是为了求解 predecessor, 所以 id 不能相等
+// */
+//func (cluster *Cluster) Predecessor(id *big.Int) *big.Int {
+//	smallest := big.NewInt(-1)
+//	result := smallest
+//
+//	// the upper part loop
+//	for _, node := range cluster.Nodes {
+//		if node.Id.Cmp(id) < 0 && node.Id.Cmp(result) > 0 {
+//			result = node.Id
+//		}
+//	}
+//
+//	if result != smallest {
+//		return result
+//	}
+//
+//	// the lower loop
+//	for _, node := range cluster.Nodes {
+//		if node.Id.Cmp(id) > 0 && node.Id.Cmp(result) > 0 {
+//			result = node.Id
+//		}
+//	}
+//
+//	if result == smallest {
+//		return nil
+//	} else {
+//		return result
+//	}
+//}
+//
+//func (cluster *Cluster) Describe()  {
+//	for _, node := range cluster.Nodes {
+//		DescribeNode(node)
+//		fmt.Print("\n\n")
+//	}
+//}
+//
+//func DescribeNode(node *v1.Node)  {
+//	nodeName := fmt.Sprintf("Node addr: %v\n", node.Address)
+//	nodeId := fmt.Sprintf("Node id: %v\n", node.Id.String())
+//	fmt.Print(nodeName)
+//	fmt.Print(nodeId)
+//	for idx, tableEntry := range node.Finger {
+//		entry := fmt.Sprintf("\t finger[%v] = %v\n", idx, tableEntry)
+//		fmt.Print(entry)
+//	}
+//}
+//
+//

@@ -4,6 +4,7 @@ import (
 	"net"
 	"math/big"
 	"crypto/sha1"
+	"fmt"
 )
 
 // inclusive id ε (left, right]
@@ -38,6 +39,17 @@ func FingerEntry(start string, fingerentry int) *big.Int {
 	id.Add(id, two)
 	return id.Mod(id, hashMod)
 }
+
+
+func CreateNode(id int) *Node {
+	node := &Node {
+		// string(id) not working
+		Address:fmt.Sprintf("%d", id),
+		Id:big.NewInt(int64(id)),
+	}
+	return node
+}
+
 
 func Hash(in string) *big.Int  {
 	hasher := sha1.New()
